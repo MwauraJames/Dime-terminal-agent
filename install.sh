@@ -14,7 +14,7 @@ fi
 
 # 2. Install dime directly from the github repo
 echo "Installing dime..."
-uv tool install git+https://github.com/your-username/dime-terminal-agent.git --force
+uv tool install git+https://github.com/MwauraJames/dime-terminal-agent.git --force
 
 echo ""
 echo "✅ dime installed successfully!"
