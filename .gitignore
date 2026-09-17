@@ -1,0 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+# Environment & Secrets
+.env
+*.env
+*.key
+
+# Virtual Environment
+.venv/
+__pycache__/
+*.pyc
+
+# Dime Cache & Local Data
+~/.cache/dime/
+last_session.json
