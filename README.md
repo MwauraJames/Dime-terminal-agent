@@ -31,17 +31,34 @@
 
 ### Prerequisites
 
-- Python 3.10+
-- [`uv`](https://github.com/astral-sh/uv) package manager
-- A [Groq API Key](https://console.groq.com/keys)
+- A [Groq API Key](https://console.groq.com/keys) — required for `dime` to run, set as the `GROQ_API_KEY` environment variable
+- macOS or Linux, with `curl` and `bash` available
 
-### Installation
+### Quick Install (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MwauraJames/Dime-terminal-agent/main/install.sh | bash
+```
+
+This installs [`uv`](https://github.com/astral-sh/uv) if it isn't already on your system, then installs `dime` globally via `uv tool install`.
+
+Then set your Groq API key:
+
+```bash
+export GROQ_API_KEY="gsk_..."
+```
+
+Add that line to your `~/.zshrc` or `~/.bashrc` so it persists across sessions, make sure `~/.local/bin` is on your `PATH`, then run `dime --help` to confirm it installed correctly.
+
+### Manual Install (from source)
+
+Prefer to run from a local clone — for example, to modify the code:
 
 1. **Clone the repository**
 
    ```bash
-   git clone https://github.com/JameZMw/dime-terminal-agent.git
-   cd dime-terminal-agent
+   git clone https://github.com/MwauraJames/Dime-terminal-agent.git
+   cd Dime-terminal-agent
    ```
 
 2. **Install dependencies**
@@ -65,7 +82,7 @@
    cat << 'EOF' > ~/.local/bin/dime
    #!/usr/bin/env bash
    set -e
-   APP_DIR="$HOME/path/to/dime-terminal-agent"
+   APP_DIR="$HOME/path/to/Dime-terminal-agent"
    exec "$APP_DIR/.venv/bin/python" "$APP_DIR/dime.py" "$@"
    EOF
    chmod +x ~/.local/bin/dime
@@ -145,6 +162,7 @@ cat error.log | dime          # Pipe logs directly into dime for analysis
 - **Redaction first:** every payload is scrubbed for Groq/OpenAI/GitHub/AWS keys, bearer tokens, and PEM private keys before it's sent to the model.
 - **Blast-radius checks:** destructive shell/SQL/Kubernetes patterns are flagged and require explicit uppercase `YES` confirmation before execution.
 - **Local session cache:** conversation history is cached at `~/.cache/dime/last_session.json` so `-r` can resume it — delete this file to clear saved context.
+- **No raw crashes:** missing API keys, network drops, rate limits, bad file paths, and interrupted commands all surface as a clear, specific message instead of a Python traceback. Set `DIME_DEBUG=1` before running if you ever need the full traceback for a bug report.
 
 ---
 
