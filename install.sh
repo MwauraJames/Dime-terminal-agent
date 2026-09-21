@@ -40,8 +40,9 @@ case "$OS_NAME" in
     Linux|Darwin) ;;
     *)
         echo "⚠️  This installer supports macOS and Linux (detected: $OS_NAME)."
-        echo "   On Windows, run it inside WSL, or install manually — see the README:"
-        echo "   ${REPO_URL}"
+        echo "   On Windows, either run this installer inside WSL, or use the native PowerShell installer:"
+        echo "     irm https://raw.githubusercontent.com/MwauraJames/Dime-terminal-agent/HEAD/install.ps1 | iex"
+        echo "   More options in the README: ${REPO_URL}"
         exit 1
         ;;
 esac
@@ -146,9 +147,10 @@ if [ -n "$PATH_NOTE" ]; then
     echo "$PATH_NOTE"
 fi
 echo ""
-echo "🔑 Before running dime, set your Groq API key:"
-echo '    export GROQ_API_KEY="gsk_..."'
-echo "   (get one for free at https://console.groq.com/keys, and add that export"
-echo "    line to your shell's startup file so it persists across sessions)"
+echo "🔑 Before running dime, set an API key for the model provider you want to use:"
+echo '    export GROQ_API_KEY="gsk_..."          # free key: https://console.groq.com/keys'
+echo '    export ANTHROPIC_API_KEY="sk-ant-..."  # or ANTHROPIC / GEMINI / OPENAI_API_KEY'
+echo "   (add that export line to your shell's startup file so it persists across sessions)"
+echo "   No key? Run a local model instead:  ollama pull llama3.1  &&  dime --model ollama_chat/llama3.1"
 echo ""
 echo "Run 'dime --help' to get started."

@@ -1,16 +1,36 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
 [project]
 name = "dime"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.2.0"
+description = "Terminal debugging assistant: paste an error, get a fix. Bring your own model (Groq, Anthropic, Gemini, OpenAI, Ollama)."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
-    "groq>=1.7.0",
-    "litellm>=1.101.0",
+    # Pinned exactly on purpose: LiteLLM sits between dime and your API keys, and versions 1.82.7 / 1.82.8
+    # were published to PyPI with a credential stealer (March 2026). Bump it deliberately, not automatically.
+    "litellm==1.102.0",
     "prompt-toolkit>=3.0.53",
     "pyperclip>=1.11.0",
     "rich>=15.0.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/MwauraJames/Dime-terminal-agent"
+Issues = "https://github.com/MwauraJames/Dime-terminal-agent/issues"
+
 [project.scripts]
-dime = "dime:main"
+dime = "dime.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["dime"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
