@@ -52,7 +52,7 @@ KEYLESS_PROVIDERS = {"ollama", "ollama_chat"}
 DEFAULT_MODELS = [
     ("groq",      DEFAULT_GROQ_MODEL),
     ("anthropic", "anthropic/claude-sonnet-5"),
-    ("gemini",    "gemini/gemini-2.5-flash"),
+    ("gemini",    "gemini/gemini-3.6-flash"),
     ("openai",    "openai/gpt-5-mini"),
 ]
 
@@ -163,7 +163,7 @@ def model_problem(model):
                 "Use the form [bold]provider/model[/bold], for example:\n"
                 "  groq/llama-3.3-70b-versatile\n"
                 "  anthropic/claude-sonnet-5\n"
-                "  gemini/gemini-2.5-flash\n"
+                "  gemini/gemini-3.6-flash\n"
                 "  openai/gpt-5-mini\n"
                 "  ollama_chat/llama3.1   (local, no key needed)")
     env_vars = KEY_ENV.get(provider)
@@ -293,15 +293,14 @@ def stream_completion(messages, model, reasoning_effort="medium", show_thinking=
                 console.print(reasoning_token, end="", style="dim italic", markup=False)
                 sys.stdout.flush()
 
-            # Capture and stream standard response tokens
+            # Capture standard response tokens. These are NOT printed live: rendering the reply as
+            # Markdown (below, once the full text is in) needs the whole thing, and printing each raw
+            # token as it arrives *and then* re-rendering the finished text would show every answer
+            # twice -- once raw (literal ```fences```), once formatted. If show_thinking is on, the
+            # reasoning tokens above still stream live, so there's visible progress before the answer
+            # itself appears all at once.
             content_token = getattr(delta, "content", None)
             if content_token:
-                if is_thinking:
-                    is_thinking = False
-                    console.print("\n")
-                    console.print(Rule(title="Remediation", style="green"))
-                console.print(content_token, end="", markup=False)
-                sys.stdout.flush()
                 full_content.append(content_token)
 
     except litellm.AuthenticationError:
@@ -375,23 +374,18 @@ def stream_completion(messages, model, reasoning_effort="medium", show_thinking=
         ))
         return "".join(full_content)
 
-    console.print("\n")
+    if is_thinking:
+        console.print("\n")
+        console.print(Rule(title="Remediation", style="green"))
 
-    # ---------------------------------------------------------
-    # Re-render the final output as highlighted Markdown
-    # ---------------------------------------------------------
     full_text = "".join(full_content)
     if full_text:
         try:
-            console.print(Rule(style="dim"))
-            md = Markdown(full_text, code_theme="monokai")
-            console.print(md)
-            console.print("\n")
+            console.print(Markdown(full_text, code_theme="monokai"))
         except Exception:
-            # Markdown rendering is cosmetic -- the raw text already streamed above,
-            # so a rendering hiccup shouldn't be treated as a failure.
-            pass
-
+            # Markdown rendering is cosmetic -- never let a rendering hiccup swallow the answer.
+            console.print(full_text, markup=False)
+    console.print()
     return full_text
 
 # Code-fence languages that count as "a command the user can run".
