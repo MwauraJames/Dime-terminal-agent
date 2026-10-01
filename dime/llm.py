@@ -4,6 +4,7 @@ tracing, system-prompt construction, and pulling the runnable command out of a r
 import os
 import re
 import sys
+import threading
 
 from dime.ui import console, print_missing_dependency  # keep first: verifies rich is installed before it's imported below
 from rich.markdown import Markdown
@@ -19,7 +20,9 @@ from dime.context import get_recent_shell_history, get_system_context
 # ==========================================
 # MODEL / PROVIDER LAYER (LiteLLM)
 # ==========================================
-litellm = None  # imported lazily by load_litellm()
+litellm = None       # set once imported -- see load_litellm() / start_litellm_preload()
+_preload_thread = None  # background import kicked off by start_litellm_preload(), if any
+_preload_error = None   # ImportError the background thread hit, if any (re-raised on the main thread)
 
 DEFAULT_GROQ_MODEL = "groq/openai/gpt-oss-120b"
 
@@ -56,25 +59,65 @@ DEFAULT_MODELS = [
     ("openai",    "openai/gpt-5-mini"),
 ]
 
-def load_litellm():
-    """Imports LiteLLM on first use (it takes ~2s, so `dime --help` doesn't pay for it)."""
+def _import_litellm():
+    """The actual (slow, ~2s) import plus one-time config. Runs on whichever thread calls it --
+    the background preload thread, or load_litellm() directly if there was no preload."""
     global litellm
-    if litellm is not None:
-        return litellm
     # Must be set BEFORE import: use the bundled model-price map instead of fetching one from
     # GitHub on every start (slow offline), and keep LiteLLM's own logging quiet.
     os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
     os.environ.setdefault("LITELLM_LOG", "ERROR")
-    try:
-        with console.status("[dim]Loading...[/dim]"):
-            import litellm as _litellm
-    except ImportError as e:
-        print_missing_dependency(getattr(e, "name", None) or str(e))
-        sys.exit(1)
+    import litellm as _litellm
     _litellm.drop_params = True          # silently skip params a given model doesn't support (temperature on o-series, etc.)
     _litellm.suppress_debug_info = True  # no "Give Feedback / Get Help" banners on errors
     _litellm.telemetry = False
     litellm = _litellm
+
+def start_litellm_preload():
+    """Starts importing LiteLLM (~2s, almost entirely spent on provider code dime never uses --
+    its proxy server, Bedrock, OpenTelemetry, guardrails...) on a background thread, so that cost
+    overlaps with other startup work instead of blocking it. In an interactive session this mostly
+    hides behind however long the user takes to read the banner and type their first message:
+    load_litellm() is only called once dime is about to actually talk to a model, and by then the
+    import has often already finished. Call this once, as early in startup as possible. Safe to
+    call more than once (later calls are a no-op) and safe to skip (load_litellm() falls back to
+    importing inline)."""
+    global _preload_thread
+    if litellm is not None or _preload_thread is not None:
+        return
+
+    def _target():
+        global _preload_error
+        try:
+            _import_litellm()
+        except ImportError as e:
+            _preload_error = e  # re-raised on the main thread by load_litellm(); a background
+                                 # thread crashing silently would otherwise look like a hang
+
+    _preload_thread = threading.Thread(target=_target, daemon=True)
+    _preload_thread.start()
+
+def load_litellm():
+    """Ensures LiteLLM is imported and ready, returning it. If start_litellm_preload() was called
+    first, this blocks only for whatever time is left on that background import (often nothing);
+    otherwise it imports inline here, exactly as before. Always safe to call -- every function
+    below that touches `litellm` calls this first rather than assuming someone else already did."""
+    if litellm is not None:
+        return litellm
+    if _preload_thread is not None:
+        with console.status("[dim]Finishing startup...[/dim]"):
+            _preload_thread.join()
+        if litellm is not None:
+            return litellm
+        if _preload_error is not None:
+            print_missing_dependency(getattr(_preload_error, "name", None) or str(_preload_error))
+            sys.exit(1)
+    try:
+        with console.status("[dim]Loading...[/dim]"):
+            _import_litellm()
+    except ImportError as e:
+        print_missing_dependency(getattr(e, "name", None) or str(e))
+        sys.exit(1)
     return litellm
 
 def normalize_model(name):
@@ -108,6 +151,7 @@ def normalize_model(name):
 
 def get_provider(model):
     """LiteLLM's provider name for a model string, or None if LiteLLM doesn't recognise it."""
+    load_litellm()  # no-op if already loaded; otherwise blocks here rather than assuming it's ready
     try:
         return litellm.get_llm_provider(model)[1]
     except Exception:
@@ -222,6 +266,7 @@ def setup_tracing(disabled=False):
     key = os.environ.get("LANGSMITH_API_KEY") or os.environ.get("LANGCHAIN_API_KEY")
     if not key:
         return None
+    load_litellm()  # only needed once we know tracing will actually be configured
     os.environ["LANGSMITH_API_KEY"] = key
     project = os.environ.get("LANGSMITH_PROJECT") or os.environ.get("LANGCHAIN_PROJECT") or "dime"
     os.environ["LANGSMITH_PROJECT"] = project

@@ -16,7 +16,7 @@ from dime.executor import handle_suggested_command
 from dime.llm import (
     build_system_prompt,
     extract_command,
-    load_litellm,
+    start_litellm_preload,
     model_problem,
     normalize_model,
     resolve_model,
@@ -61,10 +61,10 @@ Execution Actions (After a fix is suggested):
 Models (bring your own key; dime uses the first key it finds unless you pick with --model or $DIME_MODEL):
   GROQ_API_KEY       groq/openai/gpt-oss-120b   (default; also: groq/llama-3.3-70b-versatile, ...)
   ANTHROPIC_API_KEY  anthropic/claude-sonnet-5
-  GEMINI_API_KEY     gemini/gemini-2.5-flash
+  GEMINI_API_KEY     gemini/gemini-3.6-flash
   OPENAI_API_KEY     openai/gpt-5-mini
   (none)             ollama_chat/llama3.1        local Ollama, no key needed (set OLLAMA_API_BASE for a remote one)
-  Bare names work too: --model claude-sonnet-5, gemini-2.5-flash, gpt-5-mini. Any LiteLLM model string is accepted.
+  Bare names work too: --model claude-sonnet-5, gemini-3.6-flash, gpt-5-mini. Any LiteLLM model string is accepted.
 
 Tracing (optional): set LANGSMITH_API_KEY (and optionally LANGSMITH_PROJECT) to send every request to LangSmith.
   Prompts are sent after secret redaction. Opt out per run with --no-trace, or set DIME_TRACE=0.
@@ -101,7 +101,14 @@ Examples:
     # ==========================================
     # MODEL / PROVIDER SETUP (LiteLLM, bring-your-own-key)
     # ==========================================
-    load_litellm()
+    # Start the ~2s LiteLLM import now, in the background, rather than blocking on it here.
+    # resolve_model() and setup_tracing() below only need it loaded in less-common cases
+    # (an explicit --model/DIME_MODEL, or LangSmith tracing configured) and pull it in
+    # themselves if so; otherwise the first place it's actually required is stream_completion(),
+    # by which point -- especially in an interactive session, overlapping with however long the
+    # user takes to read the banner and type their first message -- the import has often already
+    # finished, so there's nothing left to wait for.
+    start_litellm_preload()
     model = resolve_model(args.model)
     trace_project = setup_tracing(disabled=args.no_trace)
     if trace_project:
