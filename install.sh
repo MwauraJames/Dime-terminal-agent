@@ -106,8 +106,23 @@ if ! uv tool install "git+${REPO_URL}" --force; then
 fi
 
 # ------------------------------------------------------------------
-# 4. Automatically add ~/.local/bin to PATH if missing.
+# 4. Automatically add ~/.local/bin to PATH (for future shells), and work out whether THIS
+#    shell -- the one the user is actually sitting in right now -- already has it too.
+#
+#    These are two different questions. Editing ~/.bashrc only affects shells started AFTER
+#    this script runs; it can never change a shell that's already open. And on a stock Ubuntu
+#    box, ~/.bashrc already has a stanza like `if [ -d "$HOME/.local/bin" ]; then PATH=...`
+#    -- which only takes effect once that directory actually exists. The first time dime (or
+#    uv itself) creates it, that stanza was already evaluated against its *absence* when this
+#    terminal started, so the current shell is stuck without it regardless of what's in the
+#    rc file. So: check the CURRENT shell's PATH (inherited from whatever invoked this script)
+#    directly, rather than inferring it from whether we just edited a config file.
 # ------------------------------------------------------------------
+case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ALREADY_ON_PATH=1 ;;
+    *) ALREADY_ON_PATH=0 ;;
+esac
+
 RC_FILE=""
 if [ -n "${ZSH_VERSION:-}" ] || [ -f "$HOME/.zshrc" ]; then
     RC_FILE="$HOME/.zshrc"
@@ -115,13 +130,11 @@ elif [ -f "$HOME/.bashrc" ]; then
     RC_FILE="$HOME/.bashrc"
 fi
 
-PATH_NOTE=""
 if [ -n "$RC_FILE" ]; then
     touch "$RC_FILE" 2>/dev/null || true
     if [ -w "$RC_FILE" ] && ! grep -q '\$HOME/.local/bin' "$RC_FILE" 2>/dev/null; then
         printf '\n# Added by dime installer\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$RC_FILE"
-        echo "✅ Added ~/.local/bin to $RC_FILE"
-        PATH_NOTE="    source $RC_FILE"
+        echo "✅ Added ~/.local/bin to $RC_FILE (takes effect in new terminals)"
     fi
 else
     echo "⚠️  Couldn't find a ~/.zshrc or ~/.bashrc to update automatically."
@@ -142,9 +155,10 @@ fi
 
 echo ""
 echo "✅ dime installed successfully!"
-if [ -n "$PATH_NOTE" ]; then
-    echo "⚠️  To start using dime immediately in this session, run:"
-    echo "$PATH_NOTE"
+if [ "$ALREADY_ON_PATH" -eq 0 ]; then
+    echo "⚠️  Your current terminal doesn't have ~/.local/bin on its PATH yet (new terminals will)."
+    echo "   To use dime right now, in THIS session, run:"
+    echo '   export PATH="$HOME/.local/bin:$PATH"'
 fi
 echo ""
 echo "🔑 Before running dime, set an API key for the model provider you want to use:"
